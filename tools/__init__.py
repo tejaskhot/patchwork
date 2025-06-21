@@ -2,6 +2,7 @@
 
 from .debugger import run_with_debugger
 from .linter import lint
+from .plot_inspector import inspect_plot
 from .test_harness import run_tests
 
-__all__ = ["run_tests", "lint", "run_with_debugger"]
+__all__ = ["run_tests", "lint", "run_with_debugger", "inspect_plot"]
