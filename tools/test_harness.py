@@ -4,12 +4,12 @@ import sys
 import tempfile
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 
 class TestCase(BaseModel):
-    test_input: Any
-    expected_output: Any
+    test_input: Any = Field(..., alias="input")
+    expected_output: Any = Field(..., alias="expected")
 
 
 class TestResult(BaseModel):
@@ -19,16 +19,34 @@ class TestResult(BaseModel):
     feedback: str
 
 
-def run_tests(code: str, tests: List[Dict], entry_point: str) -> TestResult:
+def run_tests(code: str, tests: List[Dict], entry_point: str) -> str:
+    """
+    Executes a given Python code snippet against a list of test cases.
+
+    This function provides a secure test harness to run untrusted code in an
+    isolated subprocess, check its output against expected results, and return
+    a human-readable summary of the outcome.
+
+    Args:
+        code: A string containing the Python function to be tested.
+        tests: A list of dictionaries, where each dictionary represents a
+            single test case and must contain 'input' and 'expected' keys.
+        entry_point: The name of the function within the `code` to execute.
+
+    Returns:
+        A formatted string summarizing the test results, including the number
+        of tests passed and detailed feedback on the first failure.
+    """
     try:
         test_cases = [TestCase(**t) for t in tests]
     except ValidationError as e:
-        return TestResult(
+        result = TestResult(
             success=False,
             passed_count=0,
             total_count=len(tests),
             feedback=f"Invalid test case format: {e}",
         )
+        return _format_for_agent(result)
 
     total_count = len(test_cases)
 
@@ -89,27 +107,41 @@ if __name__ == "__main__":
         )
 
         if process.returncode == 0:
-            return TestResult(
+            result = TestResult(
                 success=True,
                 passed_count=passed_count,
                 total_count=total_count,
                 feedback="All tests passed.",
             )
         else:
-            return TestResult(
+            result = TestResult(
                 success=False,
                 passed_count=passed_count,
                 total_count=total_count,
                 feedback=process.stderr.strip()
                 or "Test script failed with no error message.",
             )
+        return _format_for_agent(result)
     except subprocess.TimeoutExpired:
-        return TestResult(
+        result = TestResult(
             success=False,
             passed_count=0,
             total_count=total_count,
             feedback="Code execution timed out after 15 seconds.",
         )
+        return _format_for_agent(result)
     finally:
         if script_path and os.path.exists(script_path):
             os.remove(script_path)
+
+
+def _format_for_agent(result: TestResult) -> str:
+    """Formats the test results into a human-readable string for the agent."""
+    summary = f"Test Result: {result.passed_count}/{result.total_count} tests passed."
+    output = [summary]
+
+    if not result.success:
+        output.append("Feedback:")
+        output.append(result.feedback)
+
+    return "\\n".join(output)
