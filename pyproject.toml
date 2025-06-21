@@ -1,0 +1,20 @@
+[project]
+name = "patchwork"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.7",
+    "openai>=1.90.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.4.2",
+    "pre-commit>=3.7.1",
+]
+
+[tool.setuptools]
+packages = ["tools"]
