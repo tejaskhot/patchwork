@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import litellm
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from tools.registry import (
     tool_registry,  # Expose default registry instance for easy patching in tests and factory method
@@ -38,20 +38,23 @@ class ToolResult(TypedDict):
     is_error: bool
 
 
-class DebugStep(BaseModel):
-    """A single step in the debugging process."""
+class Step(BaseModel):
+    """A single step in the agent execution process."""
 
     iteration: int
     user_message: str
     assistant_response: str
     tool_calls: List[str] = Field(default_factory=list)
-    tool_results: List[str] = Field(default_factory=list)
+    tool_results: List[str] = Field(default_factory=list)  # For display/logging
+    tool_results_structured: List[Dict[str, Any]] = Field(
+        default_factory=list
+    )  # For evaluation
 
 
 class RunLog(BaseModel):
-    """Complete log of a debugging session."""
+    """Complete log of an agent run."""
 
-    steps: List[DebugStep] = Field(default_factory=list)
+    steps: List[Step] = Field(default_factory=list)
     final_code: Optional[str] = None
     status: Optional[str] = None  # "success", "failed", "timeout"
 
@@ -65,7 +68,7 @@ class ProblemContext(BaseModel):
     tests_formatted: str
     broken_code: str
 
-    @validator("broken_code")
+    @field_validator("broken_code")
     def validate_broken_code(cls, v):
         """Validate broken code input."""
         if not v.strip():
@@ -74,7 +77,7 @@ class ProblemContext(BaseModel):
             raise ValueError("broken_code too large (max 50KB)")
         return v
 
-    @validator("entry_point")
+    @field_validator("entry_point")
     def validate_entry_point(cls, v):
         """Validate entry point is a valid Python identifier."""
         if not v.strip():
@@ -274,9 +277,9 @@ class PatchworkAgent:
         error_msg = str(error).lower()
         return any(recoverable in error_msg for recoverable in recoverable_errors)
 
-    def debug(self, problem: ProblemContext) -> str:
+    def run(self, problem: ProblemContext) -> str:
         """
-        Main debugging loop that orchestrates the agent workflow.
+        Main execution loop that orchestrates the agent workflow.
 
         Args:
             problem: ProblemContext with all debugging information
@@ -284,9 +287,9 @@ class PatchworkAgent:
         Returns:
             Final fixed code or error message
         """
-        logger.info(f"Starting debug session for function: {problem.entry_point}")
+        logger.info(f"Starting agent run for function: {problem.entry_point}")
 
-        # Reset run log for new debugging session
+        # Reset run log for new run
         self.run_log = RunLog()
 
         # Format initial prompt
@@ -309,7 +312,7 @@ class PatchworkAgent:
                 response = self._call_model(messages, self._tool_schemas)
 
                 # Log the step
-                step = DebugStep(
+                step = Step(
                     iteration=iteration,
                     user_message=messages[-1].get("content", "") if messages else "",
                     assistant_response=response.content or "",
@@ -336,6 +339,30 @@ class PatchworkAgent:
                         for tc, res in zip(response.tool_calls, tool_results)
                     ]
 
+                    # Store structured results for evaluation
+                    step.tool_results_structured = []
+                    for tc, res in zip(response.tool_calls, tool_results):
+                        try:
+                            # Try to parse as JSON for structured access
+                            import json
+
+                            parsed_result = (
+                                json.loads(res["content"])
+                                if isinstance(res["content"], str)
+                                else res["content"]
+                            )
+                            step.tool_results_structured.append(
+                                {"tool_name": tc.function.name, "result": parsed_result}
+                            )
+                        except (json.JSONDecodeError, TypeError):
+                            # Fall back to string content
+                            step.tool_results_structured.append(
+                                {
+                                    "tool_name": tc.function.name,
+                                    "result": res["content"],
+                                }
+                            )
+
                     # Add assistant message with tool calls to conversation
                     messages.append(response.model_dump())
 
@@ -360,7 +387,7 @@ class PatchworkAgent:
                         self.run_log.final_code = final_code
                         self.run_log.status = "success"
                         self.run_log.steps.append(step)
-                        logger.info("Debug session completed successfully")
+                        logger.info("Agent run completed successfully")
                         return final_code
 
                 # Add regular assistant response to conversation
@@ -371,7 +398,7 @@ class PatchworkAgent:
                 messages.append(
                     {
                         "role": "user",
-                        "content": "Please continue debugging or provide your final solution using <final>```python ... ```</final> tags.",
+                        "content": "Please continue working on the problem or provide your final solution using <final>```python ... ```</final> tags.",
                     }
                 )
 
@@ -416,16 +443,16 @@ class PatchworkAgent:
         return timeout_msg
 
     def get_run_log(self) -> RunLog:
-        """Get the complete debugging session log."""
+        """Get the complete agent run log."""
         return self.run_log
 
     def reset(self) -> None:
-        """Reset the agent state for a new debugging session."""
+        """Reset the agent state for a new run."""
         self.run_log = RunLog()
         logger.debug("Agent state reset")
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get debugging session statistics."""
+        """Get agent run statistics."""
         return {
             "total_steps": len(self.run_log.steps),
             "total_tool_calls": sum(
