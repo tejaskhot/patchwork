@@ -93,7 +93,7 @@ class PatchworkAgent:
     def __init__(
         self,
         tool_registry: ToolRegistry,
-        model: str = "anthropic/claude-3-5-sonnet-20241022",
+        model: str = "gpt-4.1-nano",
         max_iterations: int = 10,
         temperature: float = 0.1,
         prompt_path: Optional[Path] = None,
@@ -105,12 +105,12 @@ class PatchworkAgent:
 
         Args:
             tool_registry: ToolRegistry instance for dependency injection
-            model: LiteLLM model identifier (e.g., "anthropic/claude-3-5-sonnet-20241022")
+            model: LiteLLM model identifier (e.g., "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1")
             max_iterations: Maximum debugging iterations before giving up
-            temperature: Model temperature for controlled reasoning
+            temperature: Model temperature for reasoning
             prompt_path: Path to prompt template (defaults to DEFAULT_PROMPT_PATH)
             max_tokens: Maximum tokens per model call
-            message_window_size: Maximum number of messages to keep in memory
+            message_window_size: Maximum messages to keep in conversation memory
         """
         self.tool_registry = tool_registry
         self.model = model
@@ -467,7 +467,7 @@ class PatchworkAgent:
 
 
 def create_agent(
-    model: str = "anthropic/claude-3-5-sonnet-20241022",
+    model: str = "gpt-4.1-nano",
     max_iterations: int = 10,
     temperature: float = 0.1,
     prompt_path: Optional[Path] = None,
@@ -478,7 +478,7 @@ def create_agent(
     Convenience factory function to create a PatchworkAgent with default registry.
 
     Args:
-        model: LiteLLM model identifier
+        model: LiteLLM model identifier (gpt-4.1-nano, gpt-4.1-mini, gpt-4.1)
         max_iterations: Maximum debugging iterations
         temperature: Model temperature for reasoning
         prompt_path: Path to prompt template

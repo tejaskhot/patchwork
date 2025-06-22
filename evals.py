@@ -198,7 +198,7 @@ class Level2Evaluator:
 class Level3Evaluator:
     """Level 3: Tertiary subjective rewards using LLM-as-judge."""
 
-    def __init__(self, judge_model: str = "anthropic/claude-3-5-sonnet-20241022"):
+    def __init__(self, judge_model: str = "gpt-4.1-mini"):
         """Initialize with a judge model."""
         self.judge_model = judge_model
 
@@ -306,7 +306,7 @@ Format your response as: "Score: X/10" followed by your explanation."""
 class PatchworkEvaluator:
     """Main evaluator that combines all three levels into a unified score."""
 
-    def __init__(self, judge_model: str = "anthropic/claude-3-5-sonnet-20241022"):
+    def __init__(self, judge_model: str = "gpt-4.1-mini"):
         """Initialize with evaluation components."""
         self.level1 = Level1Evaluator()
         self.level2 = Level2Evaluator()
