@@ -67,7 +67,7 @@ print(solution)
 ```bash
 # Run experiments with different models
 python run_patchwork.py --problem max_list --model gpt-4.1-nano
-python run_patchwork.py --problem filter_students --model gpt-4.1-mini
+python run_patchwork.py --problem filter_top_students --model gpt-4.1-mini
 
 # List available test problems
 python run_patchwork.py --list-problems

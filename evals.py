@@ -9,18 +9,16 @@ This module implements a three-tier evaluation framework:
 The unified "Patchwork Score" combines all metrics into a single performance measure.
 """
 
-import json
 import logging
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import litellm
 from pydantic import BaseModel, Field, field_validator
 
-from agent import DebugStep, RunLog
-from tools.linter import lint_code
-from tools.test_harness import run_tests
+from agent import RunLog
+from tools.linter import lint
+from tools.test_harness import _execute_tests
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -82,32 +80,34 @@ class Level1Evaluator:
 
     @staticmethod
     def evaluate_success_rate(
-        final_code: Optional[str], test_cases: List[Dict[str, Any]]
+        final_code: Optional[str], test_cases: List[Dict[str, Any]], entry_point: str
     ) -> float:
         """Binary success: 1.0 if all tests pass, 0.0 otherwise."""
         if not final_code:
             return 0.0
 
         try:
-            result = run_tests(final_code, test_cases)
-            return 1.0 if result.get("success", False) else 0.0
+            result = _execute_tests(final_code, test_cases, entry_point)
+            return 1.0 if result.success else 0.0
         except Exception as e:
             logger.error(f"Error evaluating success rate: {e}")
             return 0.0
 
     @staticmethod
     def evaluate_completion_rate(
-        final_code: Optional[str], test_cases: List[Dict[str, Any]]
+        final_code: Optional[str], test_cases: List[Dict[str, Any]], entry_point: str
     ) -> float:
         """Percentage of tests that passed."""
         if not final_code:
             return 0.0
 
         try:
-            result = run_tests(final_code, test_cases)
-            passed = result.get("passed_count", 0)
-            total = result.get("total_count", len(test_cases))
-            return passed / total if total > 0 else 0.0
+            result = _execute_tests(final_code, test_cases, entry_point)
+            return (
+                result.passed_count / result.total_count
+                if result.total_count > 0
+                else 0.0
+            )
         except Exception as e:
             logger.error(f"Error evaluating completion rate: {e}")
             return 0.0
@@ -178,7 +178,7 @@ class Level2Evaluator:
             return 0.0
 
         try:
-            result = lint_code(final_code)
+            result = lint(final_code)
             # Extract numerical score from linter output
             # Assuming linter returns a score out of 10
             if isinstance(result, dict) and "score" in result:
@@ -313,7 +313,11 @@ class PatchworkEvaluator:
         self.level3 = Level3Evaluator(judge_model)
 
     def evaluate(
-        self, run_log: RunLog, test_cases: List[Dict[str, Any]], original_code: str
+        self,
+        run_log: RunLog,
+        test_cases: List[Dict[str, Any]],
+        original_code: str,
+        entry_point: str,
     ) -> tuple[EvaluationMetrics, PatchworkScore]:
         """
         Perform complete evaluation of an agent run.
@@ -322,6 +326,7 @@ class PatchworkEvaluator:
             run_log: Complete log of the agent's debugging session
             test_cases: Test cases used for evaluation
             original_code: The original broken code
+            entry_point: The function name to test
 
         Returns:
             Tuple of (detailed metrics, unified score)
@@ -329,9 +334,11 @@ class PatchworkEvaluator:
         logger.info("Starting comprehensive evaluation")
 
         # Level 1 Evaluations
-        success_rate = self.level1.evaluate_success_rate(run_log.final_code, test_cases)
+        success_rate = self.level1.evaluate_success_rate(
+            run_log.final_code, test_cases, entry_point
+        )
         completion_rate = self.level1.evaluate_completion_rate(
-            run_log.final_code, test_cases
+            run_log.final_code, test_cases, entry_point
         )
         efficiency_score = self.level1.evaluate_efficiency_score(run_log)
 

@@ -19,7 +19,7 @@ Call tools using Python-style syntax:
     tool_name(param1=value1, param2=value2)
 
 Example:
-    run_tests(code=my_function_code, tests='[{"input": [1, 2], "expected": 3}]', entry_point="my_function")
+    run_tests(code=my_function_code, tests='[{{"input": [1, 2], "expected": 3}}]', entry_point="my_function")
 
 Tool responses will be returned as formatted text output. Use these results to update your understanding before taking your next step.
 

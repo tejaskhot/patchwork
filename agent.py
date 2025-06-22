@@ -20,8 +20,9 @@ from tools.registry import (
 )
 from tools.registry import ToolRegistry
 
-# Default prompt template path
-DEFAULT_PROMPT_PATH = Path("prompts/system_prompt.txt")
+# Default prompt template paths
+DEFAULT_SYSTEM_PROMPT_PATH = Path("prompts/system_prompt.txt")
+DEFAULT_USER_PROMPT_PATH = Path("prompts/user_message.txt")
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -96,7 +97,8 @@ class PatchworkAgent:
         model: str = "gpt-4.1-nano",
         max_iterations: int = 10,
         temperature: float = 0.1,
-        prompt_path: Optional[Path] = None,
+        system_prompt_path: Optional[Path] = None,
+        user_prompt_path: Optional[Path] = None,
         max_tokens: int = 4000,
         message_window_size: int = 50,  # Limit conversation length
     ):
@@ -108,7 +110,8 @@ class PatchworkAgent:
             model: LiteLLM model identifier (e.g., "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1")
             max_iterations: Maximum debugging iterations before giving up
             temperature: Model temperature for reasoning
-            prompt_path: Path to prompt template (defaults to DEFAULT_PROMPT_PATH)
+            system_prompt_path: Path to system prompt template (defaults to DEFAULT_SYSTEM_PROMPT_PATH)
+            user_prompt_path: Path to user message template (defaults to DEFAULT_USER_PROMPT_PATH)
             max_tokens: Maximum tokens per model call
             message_window_size: Maximum messages to keep in conversation memory
         """
@@ -116,7 +119,8 @@ class PatchworkAgent:
         self.model = model
         self.max_iterations = max_iterations
         self.temperature = temperature
-        self.prompt_path = prompt_path or DEFAULT_PROMPT_PATH
+        self.system_prompt_path = system_prompt_path or DEFAULT_SYSTEM_PROMPT_PATH
+        self.user_prompt_path = user_prompt_path or DEFAULT_USER_PROMPT_PATH
         self.max_tokens = max_tokens
         self.message_window_size = message_window_size
 
@@ -127,29 +131,48 @@ class PatchworkAgent:
         self._tool_schemas = self.tool_registry.get_litellm_tools_schema()
         logger.info(f"Initialized agent with {len(self._tool_schemas)} tools")
 
-        # Load the prompt template
-        self.prompt_template = self._load_prompt_template()
+        # Load the prompt templates
+        self.system_prompt_template = self._load_system_prompt_template()
+        self.user_prompt_template = self._load_user_prompt_template()
 
-        # Ensure LiteLLM debugging if needed
+        # Configure LiteLLM logging
         if os.getenv("DEBUG_LITELLM"):
             litellm.set_verbose = True
+        else:
+            litellm.suppress_debug_info = True
 
-    def _load_prompt_template(self) -> str:
-        """Load the React prompt template from file."""
-        if not self.prompt_path.exists():
+            for logger_name in logging.Logger.manager.loggerDict:
+                if "litellm" in logger_name.lower():
+                    logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    def _load_system_prompt_template(self) -> str:
+        """Load the system prompt template from file."""
+        if not self.system_prompt_path.exists():
             raise FileNotFoundError(
-                f"Prompt template not found at {self.prompt_path}. "
+                f"System prompt template not found at {self.system_prompt_path}. "
                 "Did you forget to generate or copy system_prompt.txt?"
             )
 
-        return self.prompt_path.read_text(encoding="utf-8")
+        return self.system_prompt_path.read_text(encoding="utf-8")
 
-    def _format_prompt(self, problem: ProblemContext) -> str:
-        """Format the prompt template with problem context and tool descriptions."""
+    def _load_user_prompt_template(self) -> str:
+        """Load the user message template from file."""
+        if not self.user_prompt_path.exists():
+            raise FileNotFoundError(
+                f"User prompt template not found at {self.user_prompt_path}. "
+                "Did you forget to generate or copy user_message.txt?"
+            )
+
+        return self.user_prompt_path.read_text(encoding="utf-8")
+
+    def _format_system_message(self) -> str:
+        """Format the system prompt with tool descriptions."""
         tool_descriptions = self.tool_registry.get_tool_descriptions()
+        return self.system_prompt_template.format(tool_descriptions=tool_descriptions)
 
-        return self.prompt_template.format(
-            tool_descriptions=tool_descriptions,
+    def _format_user_message(self, problem: ProblemContext) -> str:
+        """Format the user message template with problem context."""
+        return self.user_prompt_template.format(
             entry_point=problem.entry_point,
             goal=problem.goal,
             quality_criteria=problem.quality_criteria,
@@ -292,11 +315,15 @@ class PatchworkAgent:
         # Reset run log for new run
         self.run_log = RunLog()
 
-        # Format initial prompt
-        initial_prompt = self._format_prompt(problem)
+        # Format system and user messages
+        system_message = self._format_system_message()
+        user_message = self._format_user_message(problem)
 
-        # Initialize conversation
-        messages: List[LiteLLMMessage] = [{"role": "user", "content": initial_prompt}]
+        # Initialize conversation with proper message structure
+        messages: List[LiteLLMMessage] = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message},
+        ]
 
         consecutive_errors = 0
         max_consecutive_errors = 3
@@ -470,7 +497,8 @@ def create_agent(
     model: str = "gpt-4.1-nano",
     max_iterations: int = 10,
     temperature: float = 0.1,
-    prompt_path: Optional[Path] = None,
+    system_prompt_path: Optional[Path] = None,
+    user_prompt_path: Optional[Path] = None,
     max_tokens: int = 4000,
     message_window_size: int = 50,
 ) -> PatchworkAgent:
@@ -496,7 +524,8 @@ def create_agent(
         model=model,
         max_iterations=max_iterations,
         temperature=temperature,
-        prompt_path=prompt_path,
+        system_prompt_path=system_prompt_path,
+        user_prompt_path=user_prompt_path,
         max_tokens=max_tokens,
         message_window_size=message_window_size,
     )

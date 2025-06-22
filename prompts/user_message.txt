@@ -1,0 +1,15 @@
+## Context
+**Function:** `{entry_point}`
+**Goal:** {goal}
+**Quality Requirements:** {quality_criteria}
+
+## Test Cases
+{tests_formatted}
+
+## Current Code
+```python
+{broken_code}
+```
+
+## Debug Session
+Analyze the problem and begin your debugging process. Use tools strategically to gather information, test hypotheses, and validate your solution. 

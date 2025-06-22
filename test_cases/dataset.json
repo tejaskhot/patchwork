@@ -1,6 +1,7 @@
 [
   {
     "id": "filter_top_students",
+    "entry_point": "filter_top_students",
     "goal": "Return a list of names of students who scored 90 or above. Sort names alphabetically.",
     "broken_code": "def filter_top_students(scores):\n    top = []\n    for s in scores:\n        if s[1] > 90:\n            top.append(s[0])\n    return top",
     "tests": [
@@ -45,6 +46,7 @@
   },
   {
     "id": "group_by_first_letter",
+    "entry_point": "group_by_first_letter",
     "goal": "Group words by their starting letter into a dictionary. Keys should be lowercase letters. Grouping must be case-insensitive.",
     "broken_code": "def group_by_first_letter(words):\n    result = {}\n    for word in words:\n        if word[0] in result:\n            result[word[0]].append(word)\n        else:\n            result[word[0]] = [word]\n    return result",
     "tests": [
@@ -89,6 +91,7 @@
   },
   {
     "id": "plot_line_chart",
+    "entry_point": "plot_sales",
     "goal": "Plot a red dashed line of sales over years with title 'Yearly Sales', X-axis 'Year', Y-axis 'Sales'.",
     "broken_code": "def plot_sales(data):\n    import matplotlib.pyplot as plt\n    years = data.keys()\n    sales = data.values()\n    plt.plot(years, sales)\n    plt.title('Sales')\n    plt.show()",
     "test_type": "plot_inspection",
@@ -106,6 +109,7 @@
   },
   {
     "id": "remove_outliers",
+    "entry_point": "remove_outliers",
     "goal": "Remove values that are more than 2 standard deviations away from the mean. Return sorted result.",
     "broken_code": "def remove_outliers(data):\n    avg = sum(data) / len(data)\n    return [x for x in data if abs(x - avg) < 2]\n",
     "tests": [
@@ -145,6 +149,7 @@
   },
   {
     "id": "generate_slug",
+    "entry_point": "generate_slug",
     "goal": "Convert a title to a URL slug: lowercase, hyphen-separated, remove punctuation, no multiple hyphens.",
     "broken_code": "def generate_slug(title):\n    return title.lower().replace(' ', '-')",
     "tests": [

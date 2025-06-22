@@ -7,7 +7,7 @@ from function signatures and docstrings, enabling extensible tool management.
 
 import inspect
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from . import debugger, linter, plot_inspector, test_harness
 
@@ -166,6 +166,38 @@ class ToolRegistry:
                 json_type = "boolean"
             elif param_type == float:
                 json_type = "number"
+            elif hasattr(param_type, "__origin__"):
+                # Handle Union types (like Union[str, List[Dict]])
+                if param_type.__origin__ is Union:
+                    # For tests parameter specifically, we want it to accept arrays
+                    if param_name == "tests":
+                        properties[param_name] = {
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "description": "JSON string of test cases",
+                                },
+                                {
+                                    "type": "array",
+                                    "description": "Array of test case objects",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "input": {"description": "Test input"},
+                                            "expected": {
+                                                "description": "Expected output"
+                                            },
+                                        },
+                                        "required": ["input", "expected"],
+                                    },
+                                },
+                            ]
+                        }
+                        continue
+                    else:
+                        json_type = "string"  # Default for other unions
+                else:
+                    json_type = "string"  # Default fallback
             else:
                 json_type = "string"  # Default fallback
 

@@ -15,24 +15,10 @@ class TestResult(BaseModel):
     feedback: str
 
 
-def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str:
-    """
-    Executes a given Python code snippet against a list of test cases.
-
-    This function provides a secure test harness to run untrusted code in an
-    isolated subprocess, check its output against expected results, and return
-    a human-readable summary of the outcome.
-
-    Args:
-        code: A string containing the Python function to be tested.
-        tests: Either a JSON string or a list of dictionaries, where each dictionary
-            represents a single test case and must contain 'input' and 'expected' keys.
-        entry_point: The name of the function within the `code` to execute.
-
-    Returns:
-        A formatted string summarizing the test results, including the number
-        of tests passed and detailed feedback on the first failure.
-    """
+def _execute_tests(
+    code: str, tests: Union[str, List[Dict]], entry_point: str
+) -> TestResult:
+    """Core test execution logic. Returns TestResult object."""
     try:
         # Handle both JSON string and already-parsed list inputs
         if isinstance(tests, str):
@@ -52,13 +38,12 @@ def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str
                 raise ValueError(f"Test case {i} missing 'input' or 'expected' key")
 
     except (json.JSONDecodeError, ValueError) as e:
-        result = TestResult(
+        return TestResult(
             success=False,
             passed_count=0,
             total_count=0,
             feedback=f"Invalid test case format: {e}",
         )
-        return _format_for_agent(result)
 
     total_count = len(test_data)
 
@@ -124,32 +109,52 @@ if __name__ == "__main__":
         )
 
         if process.returncode == 0:
-            result = TestResult(
+            return TestResult(
                 success=True,
                 passed_count=passed_count,
                 total_count=total_count,
                 feedback="All tests passed.",
             )
         else:
-            result = TestResult(
+            return TestResult(
                 success=False,
                 passed_count=passed_count,
                 total_count=total_count,
                 feedback=process.stderr.strip()
                 or "Test script failed with no error message.",
             )
-        return _format_for_agent(result)
     except subprocess.TimeoutExpired:
-        result = TestResult(
+        return TestResult(
             success=False,
             passed_count=0,
             total_count=total_count,
             feedback="Code execution timed out after 15 seconds.",
         )
-        return _format_for_agent(result)
     finally:
         if script_path and os.path.exists(script_path):
             os.remove(script_path)
+
+
+def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str:
+    """
+    Executes a given Python code snippet against a list of test cases.
+
+    This function provides a secure test harness to run untrusted code in an
+    isolated subprocess, check its output against expected results, and return
+    a human-readable summary of the outcome.
+
+    Args:
+        code: A string containing the Python function to be tested.
+        tests: Either a JSON string or a list of dictionaries, where each dictionary
+            represents a single test case and must contain 'input' and 'expected' keys.
+        entry_point: The name of the function within the `code` to execute.
+
+    Returns:
+        A formatted string summarizing the test results, including the number
+        of tests passed and detailed feedback on the first failure.
+    """
+    result = _execute_tests(code, tests, entry_point)
+    return _format_for_agent(result)
 
 
 def _format_for_agent(result: TestResult) -> str:
