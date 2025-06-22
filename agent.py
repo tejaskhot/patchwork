@@ -100,7 +100,7 @@ class PatchworkAgent:
         system_prompt_path: Optional[Path] = None,
         user_prompt_path: Optional[Path] = None,
         max_tokens: int = 4000,
-        message_window_size: int = 50,  # Limit conversation length
+        message_window_size: int = 500,  # Limit conversation length
     ):
         """
         Initialize the Patchwork agent.
@@ -279,12 +279,11 @@ class PatchworkAgent:
         )
 
         # Always keep the first message (initial prompt) and recent messages
-        if len(messages) > self.message_window_size:
-            # Keep first message + recent messages
-            recent_count = self.message_window_size - 1
-            trimmed = [messages[0]] + messages[-recent_count:]
-            logger.debug(f"Kept first message + {recent_count} recent messages")
-            return trimmed
+        # With the higher limit (500), this should rarely be triggered
+        recent_count = self.message_window_size - 1
+        trimmed = [messages[0]] + messages[-recent_count:]
+        logger.debug(f"Kept first message + {recent_count} recent messages")
+        return trimmed
 
         return messages
 
@@ -500,7 +499,7 @@ def create_agent(
     system_prompt_path: Optional[Path] = None,
     user_prompt_path: Optional[Path] = None,
     max_tokens: int = 4000,
-    message_window_size: int = 50,
+    message_window_size: int = 500,
 ) -> PatchworkAgent:
     """
     Convenience factory function to create a PatchworkAgent with default registry.

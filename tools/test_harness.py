@@ -3,9 +3,9 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Union
+from typing import Dict, List, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class TestResult(BaseModel):
@@ -66,10 +66,8 @@ def run_all_tests():
     for i, (test_input, expected_output) in enumerate(tests):
         try:
             actual_output = None
-            if isinstance(test_input, list):
-                actual_output = {entry_point}(*test_input)
-            else:
-                actual_output = {entry_point}(test_input)
+            # Always pass test_input as a single argument
+            actual_output = {entry_point}(test_input)
             
             assert actual_output == expected_output
             passed_count += 1
