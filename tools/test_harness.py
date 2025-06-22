@@ -1,15 +1,11 @@
+import json
 import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
-from pydantic import BaseModel, Field, ValidationError
-
-
-class TestCase(BaseModel):
-    test_input: Any = Field(..., alias="input")
-    expected_output: Any = Field(..., alias="expected")
+from pydantic import BaseModel, Field
 
 
 class TestResult(BaseModel):
@@ -19,7 +15,7 @@ class TestResult(BaseModel):
     feedback: str
 
 
-def run_tests(code: str, tests: List[Dict], entry_point: str) -> str:
+def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str:
     """
     Executes a given Python code snippet against a list of test cases.
 
@@ -29,8 +25,8 @@ def run_tests(code: str, tests: List[Dict], entry_point: str) -> str:
 
     Args:
         code: A string containing the Python function to be tested.
-        tests: A list of dictionaries, where each dictionary represents a
-            single test case and must contain 'input' and 'expected' keys.
+        tests: Either a JSON string or a list of dictionaries, where each dictionary
+            represents a single test case and must contain 'input' and 'expected' keys.
         entry_point: The name of the function within the `code` to execute.
 
     Returns:
@@ -38,17 +34,38 @@ def run_tests(code: str, tests: List[Dict], entry_point: str) -> str:
         of tests passed and detailed feedback on the first failure.
     """
     try:
-        test_cases = [TestCase(**t) for t in tests]
-    except ValidationError as e:
+        # Handle both JSON string and already-parsed list inputs
+        if isinstance(tests, str):
+            test_data = json.loads(tests)
+        else:
+            test_data = tests
+
+        # Validate that we have a list
+        if not isinstance(test_data, list):
+            raise ValueError("Tests must be a list of test cases")
+
+        # Validate each test case has required keys
+        for i, test_case in enumerate(test_data):
+            if not isinstance(test_case, dict):
+                raise ValueError(f"Test case {i} must be a dictionary")
+            if "input" not in test_case or "expected" not in test_case:
+                raise ValueError(f"Test case {i} missing 'input' or 'expected' key")
+
+    except (json.JSONDecodeError, ValueError) as e:
         result = TestResult(
             success=False,
             passed_count=0,
-            total_count=len(tests),
+            total_count=0,
             feedback=f"Invalid test case format: {e}",
         )
         return _format_for_agent(result)
 
-    total_count = len(test_cases)
+    total_count = len(test_data)
+
+    # Extract test inputs and expected outputs directly from dicts
+    test_cases_for_script = [
+        (test_case["input"], test_case["expected"]) for test_case in test_data
+    ]
 
     runner_script = f"""
 import sys
@@ -58,7 +75,7 @@ import sys
 # --- End of Agent's Code ---
 
 def run_all_tests():
-    tests = {[(t.test_input, t.expected_output) for t in test_cases]}
+    tests = {test_cases_for_script}
     passed_count = 0
     
     for i, (test_input, expected_output) in enumerate(tests):
