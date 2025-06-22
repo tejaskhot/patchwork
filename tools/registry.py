@@ -6,7 +6,7 @@ from function signatures and docstrings, enabling extensible tool management.
 """
 
 import inspect
-from typing import Any, Callable, Dict, List, get_type_hints
+from typing import Callable, Dict, List
 
 from . import debugger, linter, plot_inspector, test_harness
 
