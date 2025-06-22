@@ -16,7 +16,7 @@ class PromptFormatter:
     """Formats the ReAct prompt template with dynamic content."""
 
     def __init__(self):
-        self.template_path = Path(__file__).parent / "react_prompt.txt"
+        self.template_path = Path(__file__).parent / "system_prompt.txt"
         self._load_template()
 
     def _load_template(self) -> None:
