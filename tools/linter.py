@@ -69,13 +69,26 @@ def lint(code: str) -> str:
         temp_file = f.name
 
     try:
-        result = subprocess.run(
+        # First run pylint with JSON output to get detailed issues
+        json_result = subprocess.run(
             [
                 "python",
                 "-m",
                 "pylint",
                 "--output-format=json",
-                "--reports=yes",
+                temp_file,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=LINT_TIMEOUT_SECONDS,
+        )
+
+        # Second run with text output to get the score
+        text_result = subprocess.run(
+            [
+                "python",
+                "-m",
+                "pylint",
                 temp_file,
             ],
             capture_output=True,
@@ -84,9 +97,9 @@ def lint(code: str) -> str:
         )
 
         issues = []
-        if result.stdout.strip():
+        if json_result.stdout.strip():
             try:
-                messages = json.loads(result.stdout)
+                messages = json.loads(json_result.stdout)
                 for msg in messages:
                     if isinstance(msg, dict) and "line" in msg:
                         issues.append(
@@ -99,12 +112,18 @@ def lint(code: str) -> str:
                             )
                         )
             except (json.JSONDecodeError, ValueError):
-                issues = _parse_text_output(result.stdout)
+                issues = _parse_text_output(json_result.stdout)
 
-        score = _extract_score(result.stderr)
+        # Extract score from the text output
+        score = _extract_score(text_result.stdout)
 
-        if not issues:
+        # Generate appropriate summary based on both issues and score
+        if not issues and score >= 7.0:
             summary = f"Code looks good! Score: {score:.1f}/10.0"
+        elif not issues and score > 0.0:
+            summary = f"No linting issues found, but low score: {score:.1f}/10.0"
+        elif not issues and score == 0.0:
+            summary = f"No linting issues detected, but score extraction may have failed. Score: {score:.1f}/10.0"
         else:
             summary = f"Found {len(issues)} issues. Score: {score:.1f}/10.0"
 
@@ -126,12 +145,34 @@ def lint(code: str) -> str:
 
 def _extract_score(stderr: str) -> float:
     """Extract pylint score from stderr."""
+    if not stderr:
+        return 0.0
+
+    # Try the standard pylint score pattern
     match = re.search(r"Your code has been rated at ([\d.-]+)/10", stderr)
     if match:
         try:
-            return float(match.group(1))
+            score = float(match.group(1))
+            return max(0.0, min(10.0, score))  # Clamp to valid range
         except ValueError:
-            return 0.0
+            pass
+
+    # Try alternative patterns that might appear
+    alt_patterns = [
+        r"rated at ([\d.-]+) out of 10",
+        r"score: ([\d.-]+)/10",
+        r"rating: ([\d.-]+)",
+    ]
+
+    for pattern in alt_patterns:
+        match = re.search(pattern, stderr, re.IGNORECASE)
+        if match:
+            try:
+                score = float(match.group(1))
+                return max(0.0, min(10.0, score))
+            except ValueError:
+                continue
+
     return 0.0
 
 
