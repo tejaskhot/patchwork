@@ -83,12 +83,15 @@ def lint(code: str) -> str:
             timeout=LINT_TIMEOUT_SECONDS,
         )
 
-        # Second run with text output to get the score
+        # Second run with text output to get the score using a fairer formula
+        # Default formula heavily penalizes short code by dividing by statement count
+        # Our formula: 10.0 - (5*errors + warnings + refactors + conventions)
         text_result = subprocess.run(
             [
                 "python",
                 "-m",
                 "pylint",
+                "--evaluation=max(0, 10.0 - (float(5 * error + warning + refactor + convention)))",
                 temp_file,
             ],
             capture_output=True,

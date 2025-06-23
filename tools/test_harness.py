@@ -137,6 +137,18 @@ def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str
     """
     Executes a given Python code snippet against a list of test cases.
 
+    REQUIRED PARAMETERS:
+    - code: Python function code as a string
+    - tests: JSON string like '[{"input": [1, 2], "expected": 3}]' OR list of test dictionaries
+    - entry_point: Function name to test (e.g., "my_function")
+
+    Example usage:
+    run_tests(
+        code="def add(a, b):\n    return a + b",
+        tests='[{"input": [2, 3], "expected": 5}]',
+        entry_point="add"
+    )
+
     This function provides a secure test harness to run untrusted code in an
     isolated subprocess, check its output against expected results, and return
     a human-readable summary of the outcome.
@@ -145,6 +157,13 @@ def run_tests(code: str, tests: Union[str, List[Dict]], entry_point: str) -> str
         code: A string containing the Python function to be tested.
         tests: Either a JSON string or a list of dictionaries, where each dictionary
             represents a single test case and must contain 'input' and 'expected' keys.
+
+            Example JSON string format:
+            '[{"input": [1, 2, 3], "expected": [1, 2, 3]}, {"input": [4, 5], "expected": [4, 5]}]'
+
+            Example list format:
+            [{"input": [1, 2, 3], "expected": [1, 2, 3]}, {"input": [4, 5], "expected": [4, 5]}]
+
         entry_point: The name of the function within the `code` to execute.
 
     Returns:

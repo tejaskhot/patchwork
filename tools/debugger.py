@@ -3,6 +3,7 @@ Python debugger tool for the Patchwork agent.
 Provides detailed execution tracing and variable inspection when code fails.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -17,8 +18,7 @@ DEBUG_TIMEOUT_SECONDS = 30
 class DebugResult(BaseModel):
     """Results from debugging a failed code execution."""
 
-    success: bool = Field(...,
-                          description="Whether the code executed without error")
+    success: bool = Field(..., description="Whether the code executed without error")
     error_line: Optional[int] = Field(
         None, description="Line number where error occurred"
     )
@@ -32,8 +32,7 @@ class DebugResult(BaseModel):
     execution_trace: str = Field(
         default="", description="Trace of execution leading to the error"
     )
-    summary: str = Field(...,
-                         description="Human-readable summary for the agent")
+    summary: str = Field(..., description="Human-readable summary for the agent")
 
     @field_validator("error_line")
     @classmethod
@@ -68,6 +67,18 @@ import traceback
 import json
 from types import FrameType
 from typing import Any, Dict, Optional
+
+# Set up matplotlib to prevent interactive plotting
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+
+# Override plt.show to prevent hanging
+original_show = plt.show
+def non_blocking_show(*args, **kwargs):
+    # Don't actually show the plot to prevent hanging
+    pass
+plt.show = non_blocking_show
 
 # --- Start of Agent's Code ---
 {code}
@@ -139,7 +150,25 @@ class ExecutionTracer:
 
 def debug_execution():
     tracer = ExecutionTracer()
-    test_input = {repr(test_input)}
+    
+    # Handle test_input that might be passed as string
+    test_input_raw = {repr(test_input)}
+    
+    # Try to parse it if it's a string representation
+    if isinstance(test_input_raw, str):
+        try:
+            # First try JSON parsing
+            test_input = json.loads(test_input_raw)
+        except json.JSONDecodeError:
+            try:
+                # Then try ast.literal_eval for Python literals
+                import ast
+                test_input = ast.literal_eval(test_input_raw)
+            except (ValueError, SyntaxError):
+                # If all else fails, use the raw string
+                test_input = test_input_raw
+    else:
+        test_input = test_input_raw
     
     try:
         # Enable tracing
@@ -205,13 +234,22 @@ if __name__ == "__main__":
 
         if process.returncode == 0 and process.stdout.strip():
             try:
-                # Parse JSON output from debug script
-                import json
+                # Parse JSON output from debug script - take only the last line that looks like JSON
+                lines = process.stdout.strip().split("\n")
+                json_line = None
 
-                debug_data = json.loads(process.stdout.strip())
+                # Find the last line that starts with '{' (our JSON output)
+                for line in reversed(lines):
+                    if line.strip().startswith("{"):
+                        json_line = line.strip()
+                        break
 
-                result = DebugResult(**debug_data)
-                return _format_for_agent(result)
+                if json_line:
+                    debug_data = json.loads(json_line)
+                    result = DebugResult(**debug_data)
+                    return _format_for_agent(result)
+                else:
+                    return f"No valid JSON output found in debug script output:\\n{process.stdout}"
 
             except (json.JSONDecodeError, ValueError) as e:
                 return (
