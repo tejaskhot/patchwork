@@ -1,5 +1,5 @@
 ## Context
-**Function:** `{entry_point}`
+**Function (entry_point) :** `{entry_point}`
 **Goal:** {goal}
 **Quality Requirements:** {quality_criteria}
 
@@ -11,5 +11,4 @@
 {broken_code}
 ```
 
-## Debug Session
-Analyze the problem and begin your debugging process. Use tools strategically to gather information, test hypotheses, and validate your solution. 
+Begin your debugging session now. Use the tools as needed, think aloud if it helps, and submit the final fix when you're ready.

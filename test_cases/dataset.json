@@ -87,7 +87,7 @@
         }
       }
     ],
-    "quality_criteria": "Must normalize all keys to lowercase; avoid duplication and sort inner lists alphabetically"
+    "quality_criteria": "Must normalize all keys to lowercase; avoid duplication and preserve input order within groups"
   },
   {
     "id": "plot_line_chart",
@@ -125,7 +125,8 @@
           9,
           10,
           11,
-          12
+          12,
+          50
         ]
       },
       {
@@ -138,6 +139,7 @@
           -50
         ],
         "expected": [
+          -50,
           1,
           2,
           3,
