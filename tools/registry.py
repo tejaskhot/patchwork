@@ -53,9 +53,11 @@ class ToolRegistry:
                 desc = self._generate_tool_description(name, func)
                 descriptions.append(desc)
             except Exception as e:
-                logger.error(f"Failed to generate description for tool {name}: {e}")
+                logger.error(
+                    f"Failed to generate description for tool {name}: {e}")
                 # Add fallback description
-                descriptions.append(f"**{name}()** - Tool description unavailable")
+                descriptions.append(
+                    f"`{name}()` - Tool description unavailable")
 
         self._tool_descriptions_cache = "\n\n".join(descriptions)
         return self._tool_descriptions_cache
@@ -97,18 +99,21 @@ class ToolRegistry:
             else:
                 return_str = str(return_type)
 
-            # Format the description
-            description = f"**{name}({param_str}) -> {return_str}**\n"
+                # Format the description as a clean code signature with full docstring
+            signature = f"{name}({param_str}) -> {return_str}"
 
-            # Add a concise summary from the docstring (first line)
+            # Include the COMPLETE docstring, not just the first line
             if docstring:
-                summary = docstring.split("\n")[0].strip()
-                description += f"{summary}"
+                # Clean up the docstring formatting while preserving structure
+                cleaned_docstring = docstring.strip()
+                description = f"`{signature}`\n\n{cleaned_docstring}"
+            else:
+                description = f"`{signature}`\nNo description available."
 
             return description
         except Exception as e:
             logger.error(f"Error generating description for {name}: {e}")
-            return f"**{name}()** - Description generation failed"
+            return f"`{name}()` - Description generation failed"
 
     def get_litellm_tools_schema(self) -> List[Dict[str, Any]]:
         """Get LiteLLM-compatible tool schemas for all registered tools."""
@@ -121,7 +126,8 @@ class ToolRegistry:
                 schema = self._generate_tool_schema(tool_name, tool_func)
                 tools.append(schema)
             except Exception as e:
-                logger.error(f"Failed to generate schema for tool {tool_name}: {e}")
+                logger.error(
+                    f"Failed to generate schema for tool {tool_name}: {e}")
                 # Add fallback schema
                 tools.append(
                     {
@@ -193,16 +199,18 @@ class ToolRegistry:
                                 },
                             ]
                         }
-                        continue
+                        # Don't continue here - let it fall through to check if required
                     else:
                         json_type = "string"  # Default for other unions
+                        properties[param_name] = {"type": json_type}
                 else:
                     json_type = "string"  # Default fallback
+                    properties[param_name] = {"type": json_type}
             else:
                 json_type = "string"  # Default fallback
+                properties[param_name] = {"type": json_type}
 
-            properties[param_name] = {"type": json_type}
-
+            # Check if parameter is required (no default value)
             if param.default == inspect.Parameter.empty:
                 required.append(param_name)
 
@@ -224,7 +232,8 @@ class ToolRegistry:
         if name not in self._tools:
             available = list(self._tools.keys())
             logger.warning(f"Tool '{name}' not found. Available: {available}")
-            raise ValueError(f"Tool '{name}' not found. Available tools: {available}")
+            raise ValueError(
+                f"Tool '{name}' not found. Available tools: {available}")
         return self._tools[name]
 
     def list_tools(self) -> List[str]:
@@ -246,11 +255,74 @@ class ToolRegistry:
             return error_msg
 
         try:
+            # Special handling for plot inspection tests
+            if tool_name == "run_tests" and "test_type" in kwargs and kwargs["test_type"] == "plot_inspection":
+                logger.debug("Redirecting plot test to plot inspector")
+                # Extract test data for plot inspection
+                tests = kwargs.get("tests", [])
+                if isinstance(tests, str):
+                    import json
+                    tests = json.loads(tests)
+
+                if tests and len(tests) > 0:
+                    test_input = tests[0].get("input", {})
+                else:
+                    test_input = {}
+
+                # Call plot inspector instead
+                return self._tools["inspect_plot"](
+                    code=kwargs.get("code", ""),
+                    data=test_input,
+                    entry_point=kwargs.get("entry_point", "")
+                )
+
             tool_func = self._tools[tool_name]
+
+            # Validate required parameters
+            sig = inspect.signature(tool_func)
+            required_params = [
+                param.name for param in sig.parameters.values()
+                if param.default == inspect.Parameter.empty
+            ]
+
+            missing_params = [
+                param for param in required_params if param not in kwargs]
+            if missing_params:
+                # Create a helpful suggestion
+                example_params = []
+                for param in required_params:
+                    if param == "code":
+                        example_params.append('code="def my_func(): pass"')
+                    elif param == "tests":
+                        example_params.append(
+                            'tests=\'[{"input": [], "expected": []}]\'')
+                    elif param == "entry_point":
+                        example_params.append('entry_point="my_func"')
+                    else:
+                        example_params.append(f'{param}="value"')
+
+                suggestion = f"{tool_name}({', '.join(example_params)})"
+                error_msg = f"Error: Tool '{tool_name}' missing required parameters: {missing_params}. Required: {required_params}\n\nExample: {suggestion}"
+                logger.error(error_msg)
+                return error_msg
+
             logger.debug(f"Executing tool {tool_name} with args: {kwargs}")
             result = tool_func(**kwargs)
             logger.debug(f"Tool {tool_name} completed successfully")
-            return result
+
+            # Simple output size guard to prevent token explosion
+            result_str = str(result)
+            MAX_OUTPUT_SIZE = 50000  # 50KB limit
+            if len(result_str) > MAX_OUTPUT_SIZE:
+                logger.warning(
+                    f"Tool {tool_name} output truncated: {len(result_str):,} chars -> {MAX_OUTPUT_SIZE:,} chars")
+                return (
+                    result_str[:MAX_OUTPUT_SIZE//2] +
+                    f"\n\n... [TRUNCATED: Output was {len(result_str):,} characters, showing first {MAX_OUTPUT_SIZE//2:,} chars] ...\n\n" +
+                    result_str[-MAX_OUTPUT_SIZE//4:]
+                )
+
+            return result_str
         except Exception as e:
             error_msg = f"Error executing {tool_name}: {str(e)}"
             logger.error(error_msg)

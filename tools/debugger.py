@@ -17,7 +17,8 @@ DEBUG_TIMEOUT_SECONDS = 30
 class DebugResult(BaseModel):
     """Results from debugging a failed code execution."""
 
-    success: bool = Field(..., description="Whether the code executed without error")
+    success: bool = Field(...,
+                          description="Whether the code executed without error")
     error_line: Optional[int] = Field(
         None, description="Line number where error occurred"
     )
@@ -31,7 +32,8 @@ class DebugResult(BaseModel):
     execution_trace: str = Field(
         default="", description="Trace of execution leading to the error"
     )
-    summary: str = Field(..., description="Human-readable summary for the agent")
+    summary: str = Field(...,
+                         description="Human-readable summary for the agent")
 
     @field_validator("error_line")
     @classmethod
@@ -78,24 +80,60 @@ class ExecutionTracer:
         self.error_line = None
         self.error_type = None
         self.error_message = None
+        self.max_trace_lines = 1000  # Limit trace accumulation
+        self.target_file_name = None
         
     def trace_calls(self, frame: FrameType, event: str, arg: Any) -> Optional['ExecutionTracer']:
-        if event == 'line':
-            filename = frame.f_code.co_filename
-            lineno = frame.f_lineno
-            
-            # Only trace our target file (not imports)
-            if filename.endswith('.py'):
-                self.trace_lines.append(f"Line {{lineno}}")
-                # Capture local variables at each step
-                self.last_locals = {{k: repr(v) for k, v in frame.f_locals.items() 
-                                   if not k.startswith('__')}}
+        try:
+            if event == 'line':
+                filename = frame.f_code.co_filename
+                lineno = frame.f_lineno
                 
-        elif event == 'exception':
-            self.error_line = frame.f_lineno
-            exc_type, exc_value, exc_tb = arg
-            self.error_type = exc_type.__name__
-            self.error_message = str(exc_value)
+                # Initialize target file name from the first file we see that contains our function
+                if self.target_file_name is None and '{entry_point}' in frame.f_code.co_names:
+                    self.target_file_name = filename
+                
+                # Only trace lines from our target script or temp files
+                should_trace = (
+                    filename.endswith('.py') and 
+                    (
+                        self.target_file_name and filename == self.target_file_name or
+                        '/tmp/' in filename or  # temp files
+                        'temp' in filename.lower() or
+                        filename.endswith('.py') and not any(skip in filename.lower() for skip in [
+                            'matplotlib', 'numpy', 'site-packages', 'lib/python', 
+                            'importlib', 'pkgutil', 'inspect', 'linecache',
+                            '/opt/', '/usr/', '/Library/', 'conda', 'pip'
+                        ])
+                    ) and
+                    len(self.trace_lines) < self.max_trace_lines  # Prevent infinite accumulation
+                )
+                
+                if should_trace:
+                    self.trace_lines.append(f"Line {{lineno}}")
+                    # Capture local variables only if we're in our target function
+                    if '{entry_point}' in frame.f_code.co_name or frame.f_code.co_name == '{entry_point}':
+                        try:
+                            safe_locals = {{}}
+                            for k, v in frame.f_locals.items():
+                                if not k.startswith('__'):
+                                    try:
+                                        safe_locals[k] = repr(v)[:200]  # Limit repr length
+                                    except:
+                                        safe_locals[k] = "<repr failed>"
+                            self.last_locals = safe_locals
+                        except:
+                            # If locals access fails, just continue
+                            pass
+                    
+            elif event == 'exception':
+                self.error_line = frame.f_lineno
+                exc_type, exc_value, exc_tb = arg
+                self.error_type = exc_type.__name__
+                self.error_message = str(exc_value)
+        except:
+            # If tracing itself fails, just continue silently
+            pass
             
         return self.trace_calls
 
@@ -120,8 +158,8 @@ def debug_execution():
             "error_type": None,
             "error_message": None,
             "local_variables": tracer.last_locals,
-            "execution_trace": " -> ".join(tracer.trace_lines[-10:]),  # Last 10 steps
-            "summary": f"Code executed successfully. Result: {{repr(result)}}"
+            "execution_trace": " -> ".join(tracer.trace_lines[-20:]),  # Last 20 steps only
+            "summary": f"Code executed successfully. Result: {{repr(result)[:200]}}"  # Limit result length
         }}
         
     except Exception as e:
@@ -130,10 +168,10 @@ def debug_execution():
             "success": False,
             "error_line": tracer.error_line or sys.exc_info()[2].tb_lineno,
             "error_type": type(e).__name__,
-            "error_message": str(e),
+            "error_message": str(e)[:500],  # Limit error message length
             "local_variables": tracer.last_locals,
-            "execution_trace": " -> ".join(tracer.trace_lines),
-            "summary": f"Error on line {{tracer.error_line or 'unknown'}}: {{type(e).__name__}}: {{str(e)}}"
+            "execution_trace": " -> ".join(tracer.trace_lines[-50:]),  # Last 50 steps for errors
+            "summary": f"Error on line {{tracer.error_line or 'unknown'}}: {{type(e).__name__}}: {{str(e)[:200]}}"
         }}
         
     finally:
