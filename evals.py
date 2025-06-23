@@ -80,34 +80,62 @@ class Level1Evaluator:
 
     @staticmethod
     def evaluate_success_rate(
-        final_code: Optional[str], test_cases: List[Dict[str, Any]], entry_point: str
+        final_code: Optional[str],
+        test_cases: List[Dict[str, Any]],
+        entry_point: str,
+        test_type: Optional[str] = None,
     ) -> float:
         """Binary success: 1.0 if all tests pass, 0.0 otherwise."""
         if not final_code:
             return 0.0
 
         try:
-            result = _execute_tests(final_code, test_cases, entry_point)
-            return 1.0 if result.success else 0.0
+            # For plot tests, use plot inspector instead of regular test harness
+            if test_type == "plot_inspection":
+                from tools.plot_inspector import inspect_plot
+
+                if test_cases and len(test_cases) > 0:
+                    test_input = test_cases[0].get("input", {})
+                    result = inspect_plot(final_code, test_input, entry_point)
+                    # Consider successful if plot was generated (basic success check)
+                    return 1.0 if "successfully" in result.lower() else 0.0
+                return 0.0
+            else:
+                result = _execute_tests(final_code, test_cases, entry_point)
+                return 1.0 if result.success else 0.0
         except Exception as e:
             logger.error(f"Error evaluating success rate: {e}")
             return 0.0
 
     @staticmethod
     def evaluate_completion_rate(
-        final_code: Optional[str], test_cases: List[Dict[str, Any]], entry_point: str
+        final_code: Optional[str],
+        test_cases: List[Dict[str, Any]],
+        entry_point: str,
+        test_type: Optional[str] = None,
     ) -> float:
         """Percentage of tests that passed."""
         if not final_code:
             return 0.0
 
         try:
-            result = _execute_tests(final_code, test_cases, entry_point)
-            return (
-                result.passed_count / result.total_count
-                if result.total_count > 0
-                else 0.0
-            )
+            # For plot tests, use plot inspector instead of regular test harness
+            if test_type == "plot_inspection":
+                from tools.plot_inspector import inspect_plot
+
+                if test_cases and len(test_cases) > 0:
+                    test_input = test_cases[0].get("input", {})
+                    result = inspect_plot(final_code, test_input, entry_point)
+                    # Consider successful if plot was generated (basic success check)
+                    return 1.0 if "successfully" in result.lower() else 0.0
+                return 0.0
+            else:
+                result = _execute_tests(final_code, test_cases, entry_point)
+                return (
+                    result.passed_count / result.total_count
+                    if result.total_count > 0
+                    else 0.0
+                )
         except Exception as e:
             logger.error(f"Error evaluating completion rate: {e}")
             return 0.0
@@ -318,6 +346,7 @@ class PatchworkEvaluator:
         test_cases: List[Dict[str, Any]],
         original_code: str,
         entry_point: str,
+        test_type: Optional[str] = None,
     ) -> tuple[EvaluationMetrics, PatchworkScore]:
         """
         Perform complete evaluation of an agent run.
@@ -335,10 +364,10 @@ class PatchworkEvaluator:
 
         # Level 1 Evaluations
         success_rate = self.level1.evaluate_success_rate(
-            run_log.final_code, test_cases, entry_point
+            run_log.final_code, test_cases, entry_point, test_type
         )
         completion_rate = self.level1.evaluate_completion_rate(
-            run_log.final_code, test_cases, entry_point
+            run_log.final_code, test_cases, entry_point, test_type
         )
         efficiency_score = self.level1.evaluate_efficiency_score(run_log)
 

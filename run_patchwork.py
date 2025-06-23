@@ -67,7 +67,7 @@ def create_problem_context(problem_id: str, dataset: Dict[str, Any]) -> ProblemC
     test_cases = problem_data.get("tests", [])
     tests_formatted = "\n".join(
         [
-            f"Test {i+1}: {test['input']} → {test['expected']}"
+            f"Test {i+1}: {repr(test['input'])} → {repr(test['expected'])}"
             for i, test in enumerate(test_cases)
         ]
     )
@@ -80,6 +80,7 @@ def create_problem_context(problem_id: str, dataset: Dict[str, Any]) -> ProblemC
         ),
         tests_formatted=tests_formatted,
         broken_code=problem_data["broken_code"],
+        test_type=problem_data.get("test_type"),
     )
 
 
@@ -89,13 +90,16 @@ def save_results(problem_id: str, model: str, result: str, run_log, evaluation_r
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
 
+    # Create model-specific subdirectory
+    model_safe = model.replace("/", "_").replace("\\", "_")
+    model_dir = results_dir / model_safe
+    model_dir.mkdir(exist_ok=True)
+
     # Create timestamp for this run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Save detailed run log
-    log_file = (
-        results_dir / f"run_log_{problem_id}_{model.replace('/', '_')}_{timestamp}.json"
-    )
+    # Save detailed run log in model subdirectory
+    log_file = model_dir / f"run_log_{problem_id}_{model_safe}_{timestamp}.json"
     with open(log_file, "w") as f:
         json.dump(
             {
@@ -192,7 +196,11 @@ def run_problem(
             original_code = dataset[problem_id]["broken_code"]
             entry_point = dataset[problem_id]["entry_point"]
             evaluation_results = evaluator.evaluate(
-                run_log, test_cases, original_code, entry_point
+                run_log,
+                test_cases,
+                original_code,
+                entry_point,
+                dataset[problem_id].get("test_type"),
             )
         except Exception as e:
             logger.warning(f"Evaluation failed: {e}")
@@ -283,10 +291,10 @@ def run_all_problems(args):
 
     # Save batch summary
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    batch_summary_file = (
-        Path("results")
-        / f"batch_summary_{args.model.replace('/', '_')}_{timestamp}.json"
-    )
+    model_safe = args.model.replace("/", "_").replace("\\", "_")
+    model_dir = Path("results") / model_safe
+    model_dir.mkdir(exist_ok=True)
+    batch_summary_file = model_dir / f"batch_summary_{model_safe}_{timestamp}.json"
 
     with open(batch_summary_file, "w") as f:
         json.dump(

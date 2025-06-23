@@ -68,6 +68,7 @@ class ProblemContext(BaseModel):
     quality_criteria: str
     tests_formatted: str
     broken_code: str
+    test_type: Optional[str] = None
 
     @field_validator("broken_code")
     def validate_broken_code(cls, v):
@@ -236,6 +237,14 @@ class PatchworkAgent:
                 continue
 
             try:
+                # Add test_type context if available and tool is run_tests
+                if (
+                    tool_name == "run_tests"
+                    and hasattr(self, "_current_problem_context")
+                    and self._current_problem_context.test_type
+                ):
+                    params["test_type"] = self._current_problem_context.test_type
+
                 result_content = self.tool_registry.execute_tool(tool_name, **params)
                 results.append(
                     {
@@ -311,12 +320,19 @@ class PatchworkAgent:
         """
         logger.info(f"Starting agent run for function: {problem.entry_point}")
 
+        # Store problem context for tool calls
+        self._current_problem_context = problem
+
         # Reset run log for new run
         self.run_log = RunLog()
 
         # Format system and user messages
-        system_message = self._format_system_message()
-        user_message = self._format_user_message(problem)
+        try:
+            system_message = self._format_system_message()
+            user_message = self._format_user_message(problem)
+        except Exception as e:
+            logger.error(f"Error formatting messages: {e}")
+            raise e
 
         # Initialize conversation with proper message structure
         messages: List[LiteLLMMessage] = [
@@ -345,7 +361,8 @@ class PatchworkAgent:
                     tool_calls=[],
                     tool_results=[],
                 )
-
+                # import ipdb
+                # ipdb.set_trace()
                 # Check if model wants to call tools
                 if response.tool_calls:
                     logger.debug(
