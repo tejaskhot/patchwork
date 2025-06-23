@@ -1,6 +1,10 @@
+<div align="center">
+  <img src="assets/patchwork_logo.png" alt="Patchwork Logo" width="200">
+  
 # Patchwork 🔧
-
-An intelligent code debugging agent that automatically fixes broken Python functions using LLM-powered iterative refinement.
+  
+  An intelligent code debugging agent that automatically fixes broken Python functions using LLM-powered iterative refinement.
+</div>
 
 ## Overview
 
